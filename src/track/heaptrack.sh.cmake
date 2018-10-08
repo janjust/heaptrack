@@ -145,8 +145,14 @@ while true; do
     esac
 done
 
+if  [ $OMPI_COMM_WORLD_RANK -ne 0 ]
+then
+    "$client" "$@"
+    exit 0
+fi
+
 # put output into current pwd
-output=$(pwd)/heaptrack.$(basename "$client").$$
+output=$(pwd)/heaptrack.$(basename "$client").${OMPI_COMM_WORLD_LOCAL_RANK}.${OMPI_COMM_WORLD_RANK}.$$
 
 # find preload library and interpreter executable using relative paths
 LIB_REL_PATH="@LIB_REL_PATH@"
@@ -213,7 +219,10 @@ echo "heaptrack output will be written to \"$output\""
 
 if [ -z "$debug" ] && [ -z "$pid" ]; then
   echo "starting application, this might take some time..."
-  LD_PRELOAD="$LIBHEAPTRACK_PRELOAD${LD_PRELOAD:+:$LD_PRELOAD}" DUMP_HEAPTRACK_OUTPUT="$pipe" "$client" "$@"
+  if  [ $OMPI_COMM_WORLD_RANK -eq 0 ]; then
+      LD_PRELOAD="$LIBHEAPTRACK_PRELOAD${LD_PRELOAD:+:$LD_PRELOAD}" DUMP_HEAPTRACK_OUTPUT="$pipe" "$client" "$@"
+  fi
+
 else
   if [ -z "$pid" ]; then
     echo "starting application in GDB, this might take some time..."
