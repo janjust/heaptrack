@@ -173,6 +173,32 @@ struct posix_memalign
     }
 };
 
+struct mmap
+{
+    static constexpr auto name = "mmap";
+    static constexpr auto original = &::mmap;
+
+    static void* hook(void *addr, size_t length, int prot, int flags, int fd, off_t offset) noexcept
+    {
+        auto ptr = original(addr, length, prot, flags, fd, offset);
+        heaptrack_mmap(ptr, length);
+        return ptr;
+    }
+};
+
+struct munmap
+{
+    static constexpr auto name = "munmap";
+    static constexpr auto original = &::munmap;
+
+    static int hook(void *addr, size_t length) noexcept
+    {
+        auto ret = original(addr, length);
+        heaptrack_munmap(addr);
+        return ret;
+    }
+};
+
 template <typename Hook>
 bool hook(const char* symname, Elf::Addr addr, bool restore)
 {
@@ -210,7 +236,9 @@ void apply(const char* symname, Elf::Addr addr, bool restore)
         || hook<cfree>(symname, addr, restore)
 #endif
         || hook<posix_memalign>(symname, addr, restore) || hook<dlopen>(symname, addr, restore)
-        || hook<dlclose>(symname, addr, restore);
+        || hook<dlclose>(symname, addr, restore)
+        || hook<mmap>(symname, addr, restore)
+        || hook<munmap>(symname, addr, restore);
 }
 }
 

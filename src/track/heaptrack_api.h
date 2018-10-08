@@ -60,6 +60,8 @@ extern "C" {
 __attribute__((weak)) void heaptrack_malloc(void* ptr, size_t size);
 __attribute__((weak)) void heaptrack_realloc(void* ptr_in, size_t size, void* ptr_out);
 __attribute__((weak)) void heaptrack_free(void* ptr);
+__attribute__((weak)) void heaptrack_mmap(void* ptr, size_t length);
+__attribute__((weak)) void heaptrack_munmap(void* ptr);
 
 #ifdef __cplusplus
 }
@@ -76,6 +78,15 @@ __attribute__((weak)) void heaptrack_free(void* ptr);
 #define heaptrack_report_free(ptr)                                                                                     \
     if (heaptrack_free)                                                                                                \
     heaptrack_free(ptr)
+
+#define heaptrack_report_mmap(ptr, length)                                                                               \
+    if (heaptrack_mmap)                                                                                                \
+    heaptrack_mmap(ptr, length)
+
+#define heaptrack_report_munmap(ptr)                                                                                   \
+    if (heaptrack_munmap)                                                                                              \
+    heaptrack_free(munmap)
+
 
 #else // HEAPTRACK_API_DLSYM
 
@@ -103,8 +114,10 @@ struct heaptrack_api_t
     void (*malloc)(void*, size_t);
     void (*free)(void*);
     void (*realloc)(void*, size_t, void*);
+    void (*mmap)(void*, size_t);
+    void (*munmap)(void*);
 };
-static struct heaptrack_api_t heaptrack_api = {0, 0, 0};
+static struct heaptrack_api_t heaptrack_api = {0, 0, 0, 0, 0};
 
 void heaptrack_init_api()
 {
@@ -121,6 +134,14 @@ void heaptrack_init_api()
         sym = dlsym(RTLD_NEXT, "heaptrack_free");
         if (sym)
             heaptrack_api.free = (void (*)(void*))sym;
+
+        sym = dlsym(RTLD_NEXT, "heaptrack_mmap");
+        if (sym)
+            heaptrack_api.mmap = (void (*)(void*))sym;
+
+        sym = dlsym(RTLD_NEXT, "heaptrack_munmap");
+        if (sym)
+            heaptrack_api.munmap = (void (*)(void*))sym;
 
         initialized = 1;
     }
@@ -146,6 +167,21 @@ void heaptrack_init_api()
         if (heaptrack_api.free)                                                                                        \
             heaptrack_api.free(ptr);                                                                                   \
     } while (0)
+
+#define heaptrack_report_mmap(ptr, size)                                                                               \
+    do {                                                                                                               \
+        heaptrack_init_api();                                                                                          \
+        if (heaptrack_api.mmap)                                                                                        \
+            heaptrack_api.mmap(ptr, size);                                                                             \
+    } while (0)
+
+#define heaptrack_report_unmap(ptr)                                                                                    \
+    do {                                                                                                               \
+        heaptrack_init_api();                                                                                          \
+        if (heaptrack_api.munmap)                                                                                      \
+            heaptrack_api.munmap(ptr);                                                                                 \
+    } while (0)
+
 
 #endif // HEAPTRACK_API_DLSYM
 

@@ -84,6 +84,8 @@ HOOK(cfree);
 HOOK(realloc);
 HOOK(posix_memalign);
 HOOK(valloc);
+HOOK(mmap);
+HOOK(munmap);
 #if HAVE_ALIGNED_ALLOC
 HOOK(aligned_alloc);
 #endif
@@ -140,6 +142,8 @@ void init()
 #if HAVE_ALIGNED_ALLOC
                        hooks::aligned_alloc.init();
 #endif
+                       hooks::mmap.init();
+                       hooks::munmap.init();
 
                        // cleanup environment to prevent tracing of child apps
                        unsetenv("LD_PRELOAD");
@@ -165,6 +169,17 @@ void* malloc(size_t size) noexcept
     return ptr;
 }
 
+void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset) noexcept
+{
+    if (!hooks::mmap) {
+        hooks::init();
+    }
+
+    void* ptr = hooks::mmap(addr, length, prot, flags, fd, offset);
+    heaptrack_mmap(ptr, length);
+    return ptr;
+}
+
 void free(void* ptr) noexcept
 {
     if (!hooks::free) {
@@ -178,6 +193,21 @@ void free(void* ptr) noexcept
 
     hooks::free(ptr);
 }
+
+int munmap(void* addr, size_t length) noexcept
+{
+    if (!hooks::munmap) {
+        hooks::init();
+    }
+
+    // call handler before handing over the real munmap implementation
+    // to ensure the ptr is not reused in-between and thus the output
+    // stays consistent
+    heaptrack_munmap(addr);
+
+    hooks::munmap(addr, length);
+}
+
 
 void* realloc(void* ptr, size_t size) noexcept
 {

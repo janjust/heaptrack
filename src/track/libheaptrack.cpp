@@ -743,6 +743,33 @@ void heaptrack_realloc(void* ptr_in, size_t size, void* ptr_out)
     }
 }
 
+void heaptrack_mmap(void* ptr, size_t length)
+{
+    if (ptr && !RecursionGuard::isActive) {
+        RecursionGuard guard;
+
+        debugLog<VeryVerboseOutput>("heaptrack_mmap(%p, %zu)", ptr, length);
+
+        Trace trace;
+        trace.fill(2 + HEAPTRACK_DEBUG_BUILD);
+
+        HeapTrack heaptrack(guard);
+        heaptrack.handleMalloc(ptr, length, trace);
+    }
+}
+
+void heaptrack_munmap(void *ptr)
+{
+    if (ptr && !RecursionGuard::isActive) {
+        RecursionGuard guard;
+
+        debugLog<VeryVerboseOutput>("heaptrack_free(%p)", ptr);
+
+        HeapTrack heaptrack(guard);
+        heaptrack.handleFree(ptr);
+    }
+}
+
 void heaptrack_invalidate_module_cache()
 {
     RecursionGuard guard;

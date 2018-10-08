@@ -17,6 +17,7 @@
  */
 
 #include <stddef.h>
+#include <sys/mman.h>
 
 #ifdef __cplusplus
 typedef class LineWriter linewriter_t;
@@ -40,6 +41,11 @@ void heaptrack_free(void* ptr);
 void heaptrack_realloc(void* ptr_in, size_t size, void* ptr_out);
 
 void heaptrack_invalidate_module_cache();
+
+void heaptrack_mmap(void* ptr, size_t size);
+
+void heaptrack_munmap(void* ptr);
+
 
 #ifdef __cplusplus
 }
