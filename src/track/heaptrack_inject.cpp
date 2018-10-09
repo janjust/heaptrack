@@ -199,6 +199,45 @@ struct munmap
     }
 };
 
+struct shmget
+{
+    static constexpr auto name = "shmget";
+    static constexpr auto original = &::shmget;
+
+    static int hook(key_t key, size_t size, int shmflags) noexcept
+    {
+        auto shmid = original(key, size, shmflags);
+        heaptrack_shmget(shmid, key, size);
+        return shmid;
+    }
+};
+
+struct shmat
+{
+    static constexpr auto name = "shmat";
+    static constexpr auto original = &::shmat;
+
+    static void* hook(int shmid, const void* shmaddr, int shmflags) noexcept
+    {
+        auto ptr = original(shmid, shmaddr, shmflags);
+        heaptrack_shmat(ptr, shmid);
+        return ptr;
+    }
+};
+
+struct shmdt
+{
+    static constexpr auto name = "shmdt";
+    static constexpr auto original = &::shmdt;
+
+    static int hook(const void *addr) noexcept
+    {
+        auto ret = original(addr);
+        heaptrack_shmdt(addr);
+        return ret;
+    }
+};
+
 template <typename Hook>
 bool hook(const char* symname, Elf::Addr addr, bool restore)
 {
@@ -238,7 +277,10 @@ void apply(const char* symname, Elf::Addr addr, bool restore)
         || hook<posix_memalign>(symname, addr, restore) || hook<dlopen>(symname, addr, restore)
         || hook<dlclose>(symname, addr, restore)
         || hook<mmap>(symname, addr, restore)
-        || hook<munmap>(symname, addr, restore);
+        || hook<munmap>(symname, addr, restore)
+        || hook<shmget>(symname, addr, restore)
+        || hook<shmat>(symname, addr, restore)
+        || hook<shmdt>(symname, addr, restore);
 }
 }
 

@@ -62,30 +62,45 @@ __attribute__((weak)) void heaptrack_realloc(void* ptr_in, size_t size, void* pt
 __attribute__((weak)) void heaptrack_free(void* ptr);
 __attribute__((weak)) void heaptrack_mmap(void* ptr, size_t length);
 __attribute__((weak)) void heaptrack_munmap(void* ptr);
+__attribute__((weak)) void heaptrack_shmget(int shmid, key_t key, size_t size);
+__attribute__((weak)) void heaptrack_shmat(const void* ptr, int shmid);
+__attribute__((weak)) void heaptrack_shmdt(const void* ptr);
 
 #ifdef __cplusplus
 }
 #endif
 
-#define heaptrack_report_alloc(ptr, size)                                                                              \
-    if (heaptrack_malloc)                                                                                              \
+#define heaptrack_report_alloc(ptr, size)                    \
+    if (heaptrack_malloc)                                    \
     heaptrack_malloc(ptr, size)
 
-#define heaptrack_report_realloc(ptr_in, size, ptr_out)                                                                \
-    if (heaptrack_realloc)                                                                                             \
+#define heaptrack_report_realloc(ptr_in, size, ptr_out)      \
+    if (heaptrack_realloc)                                   \
     heaptrack_realloc(ptr_in, size, ptr_out)
 
-#define heaptrack_report_free(ptr)                                                                                     \
-    if (heaptrack_free)                                                                                                \
+#define heaptrack_report_free(ptr)                           \
+    if (heaptrack_free)                                      \
     heaptrack_free(ptr)
 
-#define heaptrack_report_mmap(ptr, length)                                                                               \
-    if (heaptrack_mmap)                                                                                                \
+#define heaptrack_report_mmap(ptr, length)                   \
+    if (heaptrack_mmap)                                      \
     heaptrack_mmap(ptr, length)
 
-#define heaptrack_report_munmap(ptr)                                                                                   \
-    if (heaptrack_munmap)                                                                                              \
-    heaptrack_free(munmap)
+#define heaptrack_report_munmap(ptr)                         \
+    if (heaptrack_munmap)                                    \
+    heaptrack_munmap(munmap)
+
+#define heaptrack_report_shmget(shmid, key, size)            \
+    if (heaptrack_shmget)                                    \
+    heaptrack_shmget(shmget)
+
+#define heaptrack_report_shmat(ptr, shmid)                   \
+    if (heaptrack_shmat)                                     \
+    heaptrack_shmat(shmat)
+
+#define heaptrack_report_shmdt(ptr)                          \
+    if (heaptrack_shmdt)                                     \
+    heaptrack_smdt(shmdt)
 
 
 #else // HEAPTRACK_API_DLSYM
@@ -116,8 +131,11 @@ struct heaptrack_api_t
     void (*realloc)(void*, size_t, void*);
     void (*mmap)(void*, size_t);
     void (*munmap)(void*);
+    void (*shmget)(int, key_t, size_t);
+    void (*shmat)(void*, int);
+    void (*shmdt)(void*);
 };
-static struct heaptrack_api_t heaptrack_api = {0, 0, 0, 0, 0};
+static struct heaptrack_api_t heaptrack_api = {0, 0, 0, 0, 0, 0, 0, 0};
 
 void heaptrack_init_api()
 {
@@ -143,43 +161,77 @@ void heaptrack_init_api()
         if (sym)
             heaptrack_api.munmap = (void (*)(void*))sym;
 
+        sym = dlsym(RTLD_NEXT, "heaptrack_shmget");
+        if (sym)
+            heaptrack_api.shmget = (void (*)(void*))sym;
+
+        sym = dlsym(RTLD_NEXT, "heaptrack_shmat");
+        if (sym)
+            heaptrack_api.shmat = (void (*)(void*))sym;
+
+        sym = dlsym(RTLD_NEXT, "heaptrack_shmdt");
+        if (sym)
+            heaptrack_api.shmdt = (void (*)(void*))sym;
+
+
         initialized = 1;
     }
 }
 
-#define heaptrack_report_alloc(ptr, size)                                                                              \
-    do {                                                                                                               \
-        heaptrack_init_api();                                                                                          \
-        if (heaptrack_api.malloc)                                                                                      \
-            heaptrack_api.malloc(ptr, size);                                                                           \
+#define heaptrack_report_alloc(ptr, size)                                  \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.malloc)                                          \
+            heaptrack_api.malloc(ptr, size);                               \
     } while (0)
 
-#define heaptrack_report_realloc(ptr_in, size, ptr_out)                                                                \
-    do {                                                                                                               \
-        heaptrack_init_api();                                                                                          \
-        if (heaptrack_api.realloc)                                                                                     \
-            heaptrack_api.realloc(ptr_in, size, ptr_out);                                                              \
+#define heaptrack_report_realloc(ptr_in, size, ptr_out)                    \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.realloc)                                         \
+            heaptrack_api.realloc(ptr_in, size, ptr_out);                  \
     } while (0)
 
-#define heaptrack_report_free(ptr)                                                                                     \
-    do {                                                                                                               \
-        heaptrack_init_api();                                                                                          \
-        if (heaptrack_api.free)                                                                                        \
-            heaptrack_api.free(ptr);                                                                                   \
+#define heaptrack_report_free(ptr)                                         \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.free)                                            \
+            heaptrack_api.free(ptr);                                       \
     } while (0)
 
-#define heaptrack_report_mmap(ptr, size)                                                                               \
-    do {                                                                                                               \
-        heaptrack_init_api();                                                                                          \
-        if (heaptrack_api.mmap)                                                                                        \
-            heaptrack_api.mmap(ptr, size);                                                                             \
+#define heaptrack_report_mmap(ptr, size)                                   \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.mmap)                                            \
+            heaptrack_api.mmap(ptr, size);                                 \
     } while (0)
 
-#define heaptrack_report_unmap(ptr)                                                                                    \
-    do {                                                                                                               \
-        heaptrack_init_api();                                                                                          \
-        if (heaptrack_api.munmap)                                                                                      \
-            heaptrack_api.munmap(ptr);                                                                                 \
+#define heaptrack_report_munmap(ptr)                                        \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.munmap)                                          \
+            heaptrack_api.munmap(ptr);                                     \
+    } while (0)
+
+#define heaptrack_report_shmget(shmid, key, size)                          \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.shmget)                                          \
+            heaptrack_api.shmget(shmid, key, size);                        \
+    } while (0)
+
+#define heaptrack_report_shmat(ptr, shmid)                                 \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.shmat)                                           \
+            heaptrack_api.shmat(ptr, shmid);                               \
+    } while (0)
+
+#define heaptrack_report_shmdt(ptr)                                        \
+    do {                                                                   \
+        heaptrack_init_api();                                              \
+        if (heaptrack_api.shmdt)                                           \
+            heaptrack_api.shmdt(ptr);                                      \
     } while (0)
 
 

@@ -33,6 +33,7 @@
 #include <stdio_ext.h>
 #include <sys/file.h>
 #include <syscall.h>
+#include <map>
 
 #include <atomic>
 #include <cinttypes>
@@ -464,6 +465,53 @@ public:
         s_data->out.writeHexLine('-', reinterpret_cast<uintptr_t>(ptr));
     }
 
+    void handleShmget(int shmid, size_t size, const Trace& trace)
+    {
+        if (!s_data || !s_data->out.canWrite()) {
+            return;
+        }
+        updateModuleCache();
+
+//         const auto index = s_data->traceTree.index(
+//             trace, [](uintptr_t ip, uint32_t index) { return s_data->out.writeHexLine('t', ip, index); });
+
+        /* Hash shmid + size */
+        shmmap.insert(std::pair<int,size_t>(shmid, size));
+
+// #ifdef DEBUG_MALLOC_PTRS
+//         auto it = s_data->known.find(ptr);
+//         assert(it == s_data->known.end());
+//         s_data->known.insert(ptr);
+// #endif
+
+        //s_data->out.writeHexLine('+', size, index, reinterpret_cast<uintptr_t>(ptr));
+    }
+
+    void handleShmat(const void* ptr, int shmid, const Trace& trace)
+    {
+        std::map<int, size_t>::iterator it;
+        size_t size;
+
+        if (!s_data || !s_data->out.canWrite()) {
+            return;
+        }
+        updateModuleCache();
+
+        it = shmmap.find(shmid);
+        size = it->second;
+
+        const auto index = s_data->traceTree.index(
+            trace, [](uintptr_t ip, uint32_t index) { return s_data->out.writeHexLine('t', ip, index); });
+
+#ifdef DEBUG_MALLOC_PTRS
+        auto it = s_data->known.find(ptr);
+        assert(it == s_data->known.end());
+        s_data->known.insert(ptr);
+#endif
+
+        s_data->out.writeHexLine('+', size, index, reinterpret_cast<uintptr_t>(ptr));
+    }
+
 private:
     static int dl_iterate_phdr_callback(struct dl_phdr_info* info, size_t /*size*/, void* data)
     {
@@ -663,10 +711,12 @@ private:
 
     static std::mutex s_lock;
     static LockedData* s_data;
+    static std::map<int, size_t> shmmap;
 };
 
 std::mutex HeapTrack::s_lock;
 HeapTrack::LockedData* HeapTrack::s_data{nullptr};
+std::map<int, size_t> HeapTrack::shmmap;
 }
 extern "C" {
 
@@ -767,6 +817,48 @@ void heaptrack_munmap(void *ptr)
 
         HeapTrack heaptrack(guard);
         heaptrack.handleFree(ptr);
+    }
+}
+
+void heaptrack_shmget(int shmid, key_t key, size_t size)
+{
+    if ((shmid > -1) && !RecursionGuard::isActive) {
+        RecursionGuard guard;
+
+        debugLog<VeryVerboseOutput>("heaptrack_shmget(%d, %zu)", key, size);
+
+        Trace trace;
+        trace.fill(2 + HEAPTRACK_DEBUG_BUILD);
+
+        HeapTrack heaptrack(guard);
+        heaptrack.handleShmget(shmid, size, trace);
+    }
+}
+
+void heaptrack_shmat(const void* ptr, int shmid)
+{
+    if (ptr && !RecursionGuard::isActive) {
+        RecursionGuard guard;
+
+        debugLog<VeryVerboseOutput>("heaptrack_shmat(%p, %d)", ptr, shmid);
+        
+        Trace trace;
+        trace.fill(2 + HEAPTRACK_DEBUG_BUILD);
+
+        HeapTrack heaptrack(guard);
+        heaptrack.handleShmat(ptr, shmid, trace);
+    }
+}
+
+void heaptrack_shmdt(const void* ptr)
+{
+    if (ptr && !RecursionGuard::isActive) {
+        RecursionGuard guard;
+
+        debugLog<VeryVerboseOutput>("heaptrack_shmdt(%p)", ptr);
+
+        HeapTrack heaptrack(guard);
+        heaptrack.handleFree((void *)ptr);
     }
 }
 

@@ -19,6 +19,10 @@
 #include <stddef.h>
 #include <sys/mman.h>
 
+#include <sys/ipc.h>
+#include <sys/types.h>
+#include <sys/shm.h>
+
 #ifdef __cplusplus
 typedef class LineWriter linewriter_t;
 extern "C" {
@@ -46,6 +50,11 @@ void heaptrack_mmap(void* ptr, size_t size);
 
 void heaptrack_munmap(void* ptr);
 
+void heaptrack_shmget(int shmid, key_t key, size_t size);
+
+void heaptrack_shmat(const void *ptr, int shmid);
+
+void heaptrack_shmdt(const void *ptr);
 
 #ifdef __cplusplus
 }
